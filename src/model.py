@@ -4,6 +4,7 @@ import re
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from gensim.models import KeyedVectors
+import matplotlib.pyplot as plt
 
 import json
 import pickle
@@ -11,10 +12,13 @@ import pickle
 from random import sample, shuffle
 from collections import Counter, defaultdict
 
+#import unicodedata
+
 ## DATASET PREPARATION
 print("Loading data")
 
 data = pickle.load(open('data/dump.pkl', 'rb'))
+#data = list(filter(lambda message: len(message.content.split()) >= 10, data))
 
 id_author = defaultdict(lambda: '') # maps id to username
 counter = Counter([message.author.name for message in data])
@@ -56,10 +60,16 @@ def preprocess_text(text):
     emoji_pattern = r"<:([a-zA-Z0-9_]+):[a-zA-Z0-9_]+>"
     text = re.sub(emoji_pattern, lambda match: match.group(1), text)
     # Remove unwanted characters
-    text = re.sub(r"[^a-zA-Z0-9]", " ", text)
+    text = re.sub(r"[^a-zA-ZÀ-ÖØ-öø-ÿ0-9]", " ", text)
+      
+    # Normalize accented characters
+    #text = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('utf-8')
+                      
     return text
 
 messages = [preprocess_text(message) for message in messages]
+print(messages)
+
 
 ## LABEL CONVERSION
 author_set = list(set(authors))
@@ -114,10 +124,11 @@ y_val = labels[-num_validation_samples:]
 hidden_units = 64
 
 model = tf.keras.Sequential([
-    tf.keras.layers.Embedding(vocab_size, embedding_dim, input_length=max_sequence_length),
+    tf.keras.layers.Embedding(vocab_size, embedding_dim, input_length=max_sequence_length, weights=[embedding_matrix], trainable=False),
     tf.keras.layers.LSTM(hidden_units, return_sequences=True),
-    #tf.keras.layers.Dropout(0.2),
+    tf.keras.layers.Dropout(0.2),
     tf.keras.layers.LSTM(hidden_units),
+    #tf.keras.layers.Dropout(0.2),
     tf.keras.layers.Dense(len(author_set), activation='softmax')
 ])
 
@@ -128,10 +139,17 @@ model.summary()
 epochs = 50
 batch_size = 32
 
-early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3)
+early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
 
 
 history = model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=batch_size, epochs=epochs, callbacks=[early_stopping])
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('Model loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend(['Train', 'Test'], loc='upper left')
+plt.show()
 
 model.save("data/chatGPA_model.h5")
 

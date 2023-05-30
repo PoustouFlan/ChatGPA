@@ -43,6 +43,7 @@ let
       tensorflow
       keras
       gensim
+      matplotlib
       (
         buildPythonPackage rec {
           pname = "tortoise-orm";
